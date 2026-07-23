@@ -1,0 +1,66 @@
+name: Unpack resume-buildr-optimizer zip
+
+on:
+  push:
+    branches: [ "with-.agents-skills" ]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: with-.agents-skills
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Unpack zip and commit extracted files
+        env:
+          ZIP_NAME: "resume-buildr-optimizer 2.zip"
+        run: |
+          set -euo pipefail
+          echo "Looking for $ZIP_NAME"
+          if [ -f "$ZIP_NAME" ]; then
+            echo "Unzipping $ZIP_NAME..."
+            unzip -o "$ZIP_NAME" -d . || true
+
+            # Remove common macOS metadata and dot-underscore files
+            echo "Removing __MACOSX and dot-underscore files..."
+            find . -type d -name "__MACOSX" -prune -exec rm -rf {} + || true
+            find . -name "._*" -type f -delete || true
+
+            # Remove symlinks created by the archive
+            echo "Removing symlinks..."
+            find . -type l -print -delete || true
+
+            # If the archive extracted into a single top-level wrapper directory, move its contents up
+            WRAP_DIR="resume-buildr-optimizer 2"
+            if [ -d "$WRAP_DIR" ]; then
+              echo "Found wrapper directory $WRAP_DIR — moving contents to repository root"
+              shopt -s dotglob || true
+              mv "$WRAP_DIR"/* . || true
+              rm -rf "$WRAP_DIR" || true
+            fi
+
+            # Remove the zip file itself so repository mirrors the archive contents
+            git rm --ignore-unmatch "$ZIP_NAME" || true
+
+            # Prepare git commit
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+
+            if git diff --cached --quiet; then
+              echo "No changes to commit"
+            else
+              git commit -m "okgo"
+              git push origin HEAD:with-.agents-skills
+            fi
+          else
+            echo "$ZIP_NAME not found on branch"
+          fi
